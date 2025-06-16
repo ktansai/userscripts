@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         GitHub Generic Snippet Replacer
 // @namespace    http://tampermonkey.net/
-// @version      0.2
-// @description  Replace custom shortcuts with predefined snippets in GitHub comment boxes.
+// @version      0.4
+// @description  Replace custom shortcuts with predefined snippets in any textarea on GitHub.
 // @author       Keisuke Kawahara (@ktansai)
-// @match        https://github.com/*/*
+// @match        https://github.com/*
 // @grant        none
 // ==/UserScript==
 
@@ -14,14 +14,14 @@
     // --- スニペット設定 ---
     // ここにショートカットと対応するスニペットを追加してください。
     // キーは入力するショートカット（例: "/video"）、値は置換されるテキストです。
-    // カーソルを移動させたい場合は、`` をカーソルを置きたい位置に含めてください。
+    // カーソルを移動させたい場合は、`|` をカーソルを置きたい位置に含めてください。
     // 例: { "/video": "<video src=\"|\" />" }
     const snippets = {
-        "/video": "<video src=\"|\" />",
+        "/video ": "<video src=\"|\" />",
+        "/img ": "<img width=\"\" src=\"|\" />"
     };
     // ----------------------
 
-    // カーソルプレースホルダー
     const CURSOR_PLACEHOLDER = '|';
 
     function applySnippet(textarea, shortcut, snippetContent) {
@@ -58,15 +58,11 @@
         textarea.setSelectionRange(newCursorPosition, newCursorPosition);
     }
 
-    function observeCommentBoxes() {
-        const commentBoxes = document.querySelectorAll(
-            'textarea[id^="issuecomment-new-body"], ' +
-            'textarea[id^="pull_request_comment_body"], ' +
-            'textarea[name="comment[body]"], ' +
-            'textarea.js-comment-field' // GitHubの他のtextareaも考慮
-        );
+    function observeTextareas() {
+        // ページ上の全ての textarea 要素を選択
+        const textareas = document.querySelectorAll('textarea');
 
-        commentBoxes.forEach(box => {
+        textareas.forEach(box => {
             // 既にイベントリスナーが追加されていないかチェック
             if (!box.dataset.snippetListenerAdded) {
                 box.addEventListener('input', function() {
@@ -87,11 +83,12 @@
         });
     }
 
-    // MutationObserverを使って、DOMの変更を監視し、動的に追加されるコメント入力欄にも対応
+    // MutationObserverを使って、DOMの変更を監視し、動的に追加される textarea にも対応
     const observer = new MutationObserver(function(mutations) {
         mutations.forEach(function(mutation) {
+            // 追加されたノードの中に textarea が含まれる可能性があるため、再度すべての textarea を監視
             if (mutation.addedNodes.length > 0) {
-                observeCommentBoxes();
+                observeTextareas();
             }
         });
     });
@@ -99,6 +96,6 @@
     // ドキュメント全体を監視対象とする
     observer.observe(document.body, { childList: true, subtree: true });
 
-    // 初期ロード時にもコメントボックスを監視
-    observeCommentBoxes();
+    // 初期ロード時にも textarea を監視
+    observeTextareas();
 })();
