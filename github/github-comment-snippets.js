@@ -1,38 +1,89 @@
 // ==UserScript==
-// @name         GitHub Video Snippet Replacer
+// @name         GitHub Generic Snippet Replacer
 // @namespace    http://tampermonkey.net/
-// @version      0.1
-// @description  Replace /video with <video src="" /> in GitHub comment boxes
-// @author       Your Name
-// @match        https://github.com/*
+// @version      0.2
+// @description  Replace custom shortcuts with predefined snippets in GitHub comment boxes.
+// @author       Keisuke Kawahara (@ktansai)
+// @match        https://github.com/*/*
 // @grant        none
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    // コメント入力欄を監視する関数
+    // --- スニペット設定 ---
+    // ここにショートカットと対応するスニペットを追加してください。
+    // キーは入力するショートカット（例: "/video"）、値は置換されるテキストです。
+    // カーソルを移動させたい場合は、`` をカーソルを置きたい位置に含めてください。
+    // 例: { "/video": "<video src=\"|\" />" }
+    const snippets = {
+        "/video": "<video src=\"|\" />",
+    };
+    // ----------------------
+
+    // カーソルプレースホルダー
+    const CURSOR_PLACEHOLDER = '|';
+
+    function applySnippet(textarea, shortcut, snippetContent) {
+        const cursorPosition = textarea.selectionStart;
+        const textBeforeCursor = textarea.value.substring(0, cursorPosition);
+        const textAfterCursor = textarea.value.substring(cursorPosition);
+
+        // ショートカットが入力された部分を正確に特定し、置換
+        const shortcutStartIndex = textBeforeCursor.lastIndexOf(shortcut);
+        if (shortcutStartIndex === -1) {
+            return; // ショートカットが見つからない場合は何もしない
+        }
+
+        const textBeforeShortcut = textBeforeCursor.substring(0, shortcutStartIndex);
+
+        let newText;
+        let newCursorOffset = 0;
+
+        // カーソルプレースホルダーがある場合
+        if (snippetContent.includes(CURSOR_PLACEHOLDER)) {
+            const parts = snippetContent.split(CURSOR_PLACEHOLDER);
+            newText = textBeforeShortcut + parts[0] + parts[1] + textAfterCursor;
+            newCursorOffset = parts[0].length; // カーソルは最初の部分の長さ分移動
+        } else {
+            // カーソルプレースホルダーがない場合、スニペットの末尾にカーソルを置く
+            newText = textBeforeShortcut + snippetContent + textAfterCursor;
+            newCursorOffset = snippetContent.length;
+        }
+
+        textarea.value = newText;
+
+        // カーソル位置を設定
+        const newCursorPosition = textBeforeShortcut.length + newCursorOffset;
+        textarea.setSelectionRange(newCursorPosition, newCursorPosition);
+    }
+
     function observeCommentBoxes() {
-        // GitHubのコメント入力欄のセレクタを特定
-        // これはGitHubのUI変更により変わる可能性があるため、必要に応じて調整してください。
-        const commentBoxes = document.querySelectorAll('textarea[id^="issuecomment-new-body"], textarea[id^="pull_request_comment_body"], textarea[name="comment[body]"]');
+        const commentBoxes = document.querySelectorAll(
+            'textarea[id^="issuecomment-new-body"], ' +
+            'textarea[id^="pull_request_comment_body"], ' +
+            'textarea[name="comment[body]"], ' +
+            'textarea.js-comment-field' // GitHubの他のtextareaも考慮
+        );
 
         commentBoxes.forEach(box => {
-            box.addEventListener('input', function() {
-                const cursorPosition = this.selectionStart;
-                const textBeforeCursor = this.value.substring(0, cursorPosition);
-                const textAfterCursor = this.value.substring(cursorPosition);
+            // 既にイベントリスナーが追加されていないかチェック
+            if (!box.dataset.snippetListenerAdded) {
+                box.addEventListener('input', function() {
+                    const currentCursorPosition = this.selectionStart;
+                    const textBeforeCursor = this.value.substring(0, currentCursorPosition);
 
-                // `/video` が入力されたかチェック
-                if (textBeforeCursor.endsWith('/video')) {
-                    const newText = textBeforeCursor.slice(0, -6) + '<video src="" />' + textAfterCursor;
-                    this.value = newText;
-
-                    // カーソルを src="" の中に移動させる
-                    const newCursorPosition = textBeforeCursor.slice(0, -6).length + '<video src="'.length;
-                    this.setSelectionRange(newCursorPosition, newCursorPosition);
-                }
-            });
+                    // 定義されたすべてのショートカットをチェック
+                    for (const shortcut in snippets) {
+                        if (textBeforeCursor.endsWith(shortcut)) {
+                            // ショートカットが入力されたら置換処理を実行
+                            applySnippet(this, shortcut, snippets[shortcut]);
+                            break; // 複数のショートカットが同時にマッチしないように、最初に見つかったもので終了
+                        }
+                    }
+                });
+                box.dataset.snippetListenerAdded = 'true'; // フラグを設定
+            }
         });
     }
 
@@ -40,7 +91,6 @@
     const observer = new MutationObserver(function(mutations) {
         mutations.forEach(function(mutation) {
             if (mutation.addedNodes.length > 0) {
-                // 新しく追加されたノードの中にコメントボックスがあるかチェック
                 observeCommentBoxes();
             }
         });
