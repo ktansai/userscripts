@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         GitHub Issue/PR Title Copy Button
 // @namespace    http://tampermonkey.net/
-// @version      0.1
-// @description  Add a "Copy for Slack" button to GitHub issue/PR pages. Copies "Title #number" with the #number linked to the issue/PR, so pasting into Slack keeps the hyperlink.
+// @version      0.2
+// @description  Add a "🔗 Copy with Link" button to GitHub issue/PR pages. Copies "Title #number" to the clipboard, with #number as a hyperlink so pasting into Slack / Notion / Google Docs keeps the link.
 // @author       Keisuke Kawahara (@ktansai)
 // @match        https://github.com/*/*/issues/*
 // @match        https://github.com/*/*/pull/*
@@ -13,9 +13,33 @@
     'use strict';
 
     const BUTTON_ID = 'userscript-copy-issue-button';
-    const LABEL_DEFAULT = 'Copy for Slack';
-    const LABEL_DONE = 'Copied!';
-    const LABEL_FAIL = 'Failed';
+    const LABEL_DEFAULT = '🔗 Copy with Link';
+    const LABEL_DONE = '✅ Copied!';
+    const LABEL_FAIL = '⚠️ Failed';
+
+    const TITLE_SELECTORS = [
+        'bdi.js-issue-title',
+        '[data-testid="issue-title"]',
+        '[data-testid="pull-request-title"]',
+        'h1.gh-header-title .js-issue-title',
+        'h1 .js-issue-title',
+        '.js-issue-title',
+        'h1 bdi'
+    ];
+
+    function findTitleElement() {
+        for (const sel of TITLE_SELECTORS) {
+            const el = document.querySelector(sel);
+            if (el && el.textContent.trim()) return el;
+        }
+        return null;
+    }
+
+    function extractTitleFromDocTitle() {
+        // 例: "Title · Issue #1 · owner/repo" / "Title by user · Pull Request #1 · owner/repo"
+        const m = document.title.match(/^(.+?)(?:\s+by\s+\S+)?\s+·\s+(?:Issue|Pull Request)\s+#\d+/);
+        return m ? m[1].trim() : null;
+    }
 
     function getIssueInfo() {
         const match = location.pathname.match(/^\/([^/]+)\/([^/]+)\/(issues|pull)\/(\d+)/);
@@ -23,13 +47,8 @@
         const [, owner, repo, type, number] = match;
         const url = `${location.origin}/${owner}/${repo}/${type}/${number}`;
 
-        const titleEl =
-            document.querySelector('bdi.js-issue-title') ||
-            document.querySelector('[data-testid="issue-title"]') ||
-            document.querySelector('h1.gh-header-title .js-issue-title');
-        if (!titleEl) return null;
-
-        const title = titleEl.textContent.trim();
+        const titleEl = findTitleElement();
+        const title = (titleEl && titleEl.textContent.trim()) || extractTitleFromDocTitle();
         if (!title) return null;
 
         return { title, number, url };
@@ -106,17 +125,17 @@
         setTimeout(() => { btn.textContent = LABEL_DEFAULT; }, 1500);
     }
 
+    function findHost() {
+        const titleEl = findTitleElement();
+        if (!titleEl) return null;
+        return titleEl.closest('h1') || titleEl.parentElement;
+    }
+
     function injectButton() {
         if (document.getElementById(BUTTON_ID)) return;
         if (!getIssueInfo()) return;
 
-        const titleEl =
-            document.querySelector('bdi.js-issue-title') ||
-            document.querySelector('[data-testid="issue-title"]') ||
-            document.querySelector('h1.gh-header-title .js-issue-title');
-        if (!titleEl) return;
-
-        const host = titleEl.closest('h1') || titleEl.parentElement;
+        const host = findHost();
         if (!host) return;
 
         host.appendChild(createButton());
