@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitHub Issue/PR Title Copy Button
 // @namespace    http://tampermonkey.net/
-// @version      0.2
+// @version      0.3
 // @description  Add a "🔗 Copy with Link" button to GitHub issue/PR pages. Copies "Title #number" to the clipboard, with #number as a hyperlink so pasting into Slack / Notion / Google Docs keeps the link.
 // @author       Keisuke Kawahara (@ktansai)
 // @match        https://github.com/*/*/issues/*
@@ -18,6 +18,10 @@
     const LABEL_FAIL = '⚠️ Failed';
 
     const TITLE_SELECTORS = [
+        // 新レイアウト (React, Primer PageHeader): PR と一部 issue で使用される
+        'h1[data-component="PH_Title"] .markdown-title',
+        'h1[data-component="PH_Title"] > span:first-child',
+        // 旧レイアウト
         'bdi.js-issue-title',
         '[data-testid="issue-title"]',
         '[data-testid="pull-request-title"]',
